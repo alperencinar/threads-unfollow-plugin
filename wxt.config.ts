@@ -5,24 +5,20 @@ export default defineConfig({
   manifest: {
     name: 'Threads.com Unfollower Tracker (Safe & Local)',
     version: '1.0.0',
-    description: 'threads.com üzerinde sizi takipten çıkanları yerel, gizli ve güvenli şekilde analiz edin.',
-    permissions: ['storage', 'sidePanel'],
+    description: 'See who unfollows you on threads.com safely, locally and privately.',
+    permissions: ['storage', 'sidePanel', 'tabs', 'declarativeNetRequest'],
     host_permissions: [
       '*://*.threads.com/*',
-      '*://*.threads.net/*'
+      '*://*.threads.net/*',
+      '*://*.cdninstagram.com/*',
+      '*://*.fbcdn.net/*'
     ],
     action: {
-      default_title: 'Threads.com Takipçi Analizcisi'
+      default_title: 'Threads Takipçi Analizcisi / Unfollower Tracker'
     },
     side_panel: {
       default_path: 'sidepanel/index.html'
     },
-    web_accessible_resources: [
-      {
-        resources: ['main-world-bridge.js'],
-        matches: ['*://*.threads.com/*', '*://*.threads.net/*'],
-      },
-    ],
   },
   modules: ['@wxt-dev/module-react'],
 });

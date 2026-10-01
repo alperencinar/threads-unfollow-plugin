@@ -1,38 +1,66 @@
 import React from 'react';
 import { ActiveTabType } from '../../../src/presentation/store/useUnfollowerStore';
+import { Language, translations } from '../../../src/presentation/i18n';
 
 interface TabNavigationProps {
   activeTab: ActiveTabType;
   onSelectTab: (tab: ActiveTabType) => void;
+  language: Language;
   counts: {
-    unfollowers: number;
     notFollowing: number;
-    newFollowers: number;
     fans: number;
+    mutuals: number;
   };
 }
 
 export const TabNavigation: React.FC<TabNavigationProps> = ({
   activeTab,
   onSelectTab,
+  language,
   counts,
 }) => {
-  const tabs: Array<{ id: ActiveTabType; label: string; count: number; activeColor: string }> = [
-    { id: 'unfollowers', label: 'Çıkanlar', count: counts.unfollowers, activeColor: '#ef4444' },
-    { id: 'notFollowing', label: 'Takip Etmeyen', count: counts.notFollowing, activeColor: '#f59e0b' },
-    { id: 'newFollowers', label: 'Yeni', count: counts.newFollowers, activeColor: '#10b981' },
-    { id: 'fans', label: 'Hayranlar', count: counts.fans, activeColor: '#8b5cf6' },
+  const t = translations[language];
+
+  const tabs: Array<{
+    id: ActiveTabType;
+    label: string;
+    count: number;
+    badgeBg: string;
+    badgeColor: string;
+  }> = [
+    {
+      id: 'notFollowing',
+      label: t.tabNotFollowing,
+      count: counts.notFollowing,
+      badgeBg: 'rgba(245, 158, 11, 0.15)',
+      badgeColor: '#fbbf24',
+    },
+    {
+      id: 'fans',
+      label: t.tabFans,
+      count: counts.fans,
+      badgeBg: 'rgba(139, 92, 246, 0.15)',
+      badgeColor: '#c084fc',
+    },
+    {
+      id: 'mutuals',
+      label: t.tabMutuals,
+      count: counts.mutuals,
+      badgeBg: 'rgba(16, 185, 129, 0.15)',
+      badgeColor: '#34d399',
+    },
   ];
 
   return (
     <nav
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
+        gridTemplateColumns: 'repeat(3, 1fr)',
         gap: '4px',
-        background: '#171717',
+        background: '#141414',
         padding: '3px',
-        borderRadius: '8px',
+        borderRadius: '10px',
+        border: '1px solid #262626',
         marginBottom: '12px',
       }}
     >
@@ -43,22 +71,38 @@ export const TabNavigation: React.FC<TabNavigationProps> = ({
             key={tab.id}
             onClick={() => onSelectTab(tab.id)}
             style={{
-              padding: '6px 2px',
+              padding: '8px 4px',
+              minHeight: '40px',
               fontSize: '11px',
-              fontWeight: isSelected ? 600 : 400,
+              fontWeight: isSelected ? 600 : 500,
               color: isSelected ? '#ffffff' : '#a3a3a3',
-              background: isSelected ? tab.activeColor : 'transparent',
-              border: 'none',
-              borderRadius: '6px',
+              background: isSelected ? '#262626' : 'transparent',
+              border: isSelected ? '1px solid #404040' : '1px solid transparent',
+              borderRadius: '7px',
               cursor: 'pointer',
               display: 'flex',
-              flexDirection: 'column',
               alignItems: 'center',
-              transition: 'all 0.15s ease',
+              justifyContent: 'center',
+              gap: '5px',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: isSelected ? '0 2px 4px rgba(0,0,0,0.4)' : 'none',
             }}
           >
             <span>{tab.label}</span>
-            <span style={{ fontSize: '10px', opacity: 0.9 }}>({tab.count})</span>
+            <span
+              style={{
+                fontSize: '10px',
+                fontWeight: 700,
+                padding: '1px 5px',
+                borderRadius: '9999px',
+                background: isSelected ? tab.badgeBg : '#1f1f1f',
+                color: isSelected ? tab.badgeColor : '#737373',
+                minWidth: '16px',
+                textAlign: 'center',
+              }}
+            >
+              {tab.count}
+            </span>
           </button>
         );
       })}

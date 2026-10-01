@@ -1,14 +1,26 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useUnfollowerStore } from '../../src/presentation/store/useUnfollowerStore';
 import { LocalDatabase } from '../../src/infrastructure/storage/LocalDatabase';
+import {
+  Language,
+  getDefaultLanguage,
+  saveLanguage,
+  translations,
+} from '../../src/presentation/i18n';
 import { Header } from './components/Header';
-import { SafetyNotice } from './components/SafetyNotice';
+import { ConnectionStatus, SafetyNotice } from './components/SafetyNotice';
 import { TabNavigation } from './components/TabNavigation';
 import { UserList } from './components/UserList';
+import { AutoUnfollowControl } from './components/AutoUnfollowControl';
 
 const db = new LocalDatabase();
 
 export const App: React.FC = () => {
+  const [language, setLanguage] = useState<Language>(getDefaultLanguage);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('CHECKING');
+  const [threadsTabId, setThreadsTabId] = useState<number | null>(null);
+  const t = translations[language];
+
   const {
     activeTab,
     diffResult,
@@ -16,15 +28,106 @@ export const App: React.FC = () => {
     totalFollowing,
     setActiveTab,
     loadDiff,
+    removeNotFollowingUser,
     reset,
   } = useUnfollowerStore();
 
-  useEffect(() => {
-    loadDiff('current_user', db);
+  const checkConnection = useCallback(async () => {
+    if (typeof chrome === 'undefined' || !chrome.tabs) {
+      setConnectionStatus('CONNECTED');
+      return;
+    }
 
-    const messageListener = (message: { action?: string }) => {
+    try {
+      const tabs = await chrome.tabs.query({
+        url: ['*://*.threads.com/*', '*://*.threads.net/*'],
+      });
+
+      if (tabs.length === 0) {
+        setConnectionStatus('NOT_ON_THREADS');
+        setThreadsTabId(null);
+        return;
+      }
+
+      const activeTab = tabs.find((t) => t.active) || tabs[0];
+      if (!activeTab?.id) {
+        setConnectionStatus('NOT_ON_THREADS');
+        setThreadsTabId(null);
+        return;
+      }
+
+      setThreadsTabId(activeTab.id);
+
+      chrome.tabs.sendMessage(activeTab.id, { action: 'PING' }, (res) => {
+        if (chrome.runtime?.lastError || !res?.connected) {
+          setConnectionStatus('NEEDS_REFRESH');
+        } else {
+          setConnectionStatus('CONNECTED');
+        }
+      });
+    } catch {
+      setConnectionStatus('CONNECTED');
+    }
+  }, []);
+
+  useEffect(() => {
+    checkConnection();
+
+    const handleTabUpdated = (_tabId: number, changeInfo: { status?: string }) => {
+      if (changeInfo.status === 'complete') {
+        checkConnection();
+      }
+    };
+
+    chrome.tabs?.onUpdated?.addListener(handleTabUpdated);
+    chrome.tabs?.onActivated?.addListener(checkConnection);
+
+    return () => {
+      chrome.tabs?.onUpdated?.removeListener(handleTabUpdated);
+      chrome.tabs?.onActivated?.removeListener(checkConnection);
+    };
+  }, [checkConnection]);
+
+  const handleRefreshTab = () => {
+    if (threadsTabId && chrome.tabs?.reload) {
+      chrome.tabs.reload(threadsTabId, {}, () => {
+        setTimeout(checkConnection, 800);
+      });
+    }
+  };
+
+  const handleOpenThreads = () => {
+    if (chrome.tabs?.create) {
+      chrome.tabs.create({ url: 'https://www.threads.com' });
+    }
+  };
+
+  useEffect(() => {
+    // Initial fetch from DB
+    if (chrome.storage?.local) {
+      chrome.storage.local
+        .get(['lastActiveUserId'])
+        .then((res) => {
+          const userId = typeof res?.lastActiveUserId === 'string' ? res.lastActiveUserId : undefined;
+          loadDiff(userId, db);
+        })
+        .catch(() => {
+          loadDiff(undefined, db);
+        });
+    } else {
+      loadDiff(undefined, db);
+    }
+
+    const messageListener = (message: {
+      action?: string;
+      targetUserId?: string;
+      userId?: string;
+    }) => {
       if (message?.action === 'DATABASE_UPDATED') {
-        loadDiff('current_user', db);
+        loadDiff(message.targetUserId, db);
+      }
+      if (message?.action === 'USER_UNFOLLOWED' && message.userId) {
+        removeNotFollowingUser(message.userId);
       }
     };
 
@@ -32,19 +135,27 @@ export const App: React.FC = () => {
     return () => {
       chrome.runtime?.onMessage?.removeListener(messageListener);
     };
-  }, [loadDiff]);
+  }, [loadDiff, removeNotFollowingUser]);
+
+  const handleToggleLang = () => {
+    const nextLang: Language = language === 'tr' ? 'en' : 'tr';
+    setLanguage(nextLang);
+    saveLanguage(nextLang);
+  };
 
   const handleClear = async () => {
     await db.clearAll();
+    if (chrome.storage?.local) {
+      chrome.storage.local.remove(['lastActiveUserId']).catch(() => {});
+    }
     reset();
   };
 
   const counts = useMemo(
     () => ({
-      unfollowers: diffResult?.unfollowers.length || 0,
       notFollowing: diffResult?.notFollowingBack.length || 0,
-      newFollowers: diffResult?.newFollowers.length || 0,
       fans: diffResult?.fans.length || 0,
+      mutuals: diffResult?.mutuals.length || 0,
     }),
     [diffResult]
   );
@@ -52,12 +163,8 @@ export const App: React.FC = () => {
   const activeUsers = useMemo(() => {
     if (!diffResult) return [];
     switch (activeTab) {
-      case 'unfollowers':
-        return diffResult.unfollowers;
       case 'notFollowing':
         return diffResult.notFollowingBack;
-      case 'newFollowers':
-        return diffResult.newFollowers;
       case 'fans':
         return diffResult.fans;
       case 'mutuals':
@@ -69,18 +176,18 @@ export const App: React.FC = () => {
 
   const emptyMessage = useMemo(() => {
     switch (activeTab) {
-      case 'unfollowers':
-        return 'Henüz seni takipten çıkan kimse tespit edilmedi.';
       case 'notFollowing':
-        return 'Geri takip etmeyen kimse bulunamadı.';
-      case 'newFollowers':
-        return 'Yeni takipçi bulunmuyor.';
+        return t.emptyNotFollowing;
       case 'fans':
-        return 'Hayran listesi boş.';
+        return t.emptyFans;
+      case 'mutuals':
+        return t.emptyMutuals;
       default:
-        return 'Kayıt bulunamadı.';
+        return t.emptyGeneral;
     }
-  }, [activeTab]);
+  }, [activeTab, t]);
+
+  const hasData = totalFollowers > 0 || totalFollowing > 0;
 
   return (
     <div
@@ -90,20 +197,43 @@ export const App: React.FC = () => {
         height: '100vh',
         boxSizing: 'border-box',
         padding: '12px',
+        backgroundColor: '#0a0a0a',
+        color: '#ededed',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
       }}
     >
       <Header
         onClear={handleClear}
         totalFollowers={totalFollowers}
         totalFollowing={totalFollowing}
+        language={language}
+        onToggleLang={handleToggleLang}
       />
-      <SafetyNotice />
+      <SafetyNotice
+        language={language}
+        hasData={hasData}
+        connectionStatus={connectionStatus}
+        onRefreshTab={handleRefreshTab}
+        onOpenThreads={handleOpenThreads}
+      />
       <TabNavigation
         activeTab={activeTab}
         onSelectTab={setActiveTab}
+        language={language}
         counts={counts}
       />
-      <UserList users={activeUsers} emptyMessage={emptyMessage} />
+      {activeTab === 'notFollowing' && (
+        <AutoUnfollowControl
+          users={diffResult?.notFollowingBack || []}
+          language={language}
+        />
+      )}
+      <UserList
+        users={activeUsers}
+        emptyMessage={emptyMessage}
+        language={language}
+        canUnfollow={activeTab === 'notFollowing'}
+      />
     </div>
   );
 };

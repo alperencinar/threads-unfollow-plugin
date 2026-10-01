@@ -15,10 +15,13 @@ describe('useUnfollowerStore', () => {
 
   it('updates activeTab correctly', () => {
     const store = useUnfollowerStore.getState();
-    expect(store.activeTab).toBe('unfollowers');
+    expect(store.activeTab).toBe('notFollowing');
 
-    store.setActiveTab('notFollowing');
-    expect(useUnfollowerStore.getState().activeTab).toBe('notFollowing');
+    store.setActiveTab('fans');
+    expect(useUnfollowerStore.getState().activeTab).toBe('fans');
+
+    store.setActiveTab('mutuals');
+    expect(useUnfollowerStore.getState().activeTab).toBe('mutuals');
   });
 
   it('loads diff and sets new baseline if only 1 snapshot exists', async () => {
@@ -40,5 +43,11 @@ describe('useUnfollowerStore', () => {
     expect(state.totalFollowing).toBe(1);
     expect(state.diffResult?.unfollowers).toHaveLength(0);
     expect(state.diffResult?.notFollowingBack).toHaveLength(1); // Bob does not follow Alice
+
+    // Test removing notFollowing user
+    useUnfollowerStore.getState().removeNotFollowingUser('u2');
+    const updatedState = useUnfollowerStore.getState();
+    expect(updatedState.diffResult?.notFollowingBack).toHaveLength(0);
+    expect(updatedState.totalFollowing).toBe(0);
   });
 });

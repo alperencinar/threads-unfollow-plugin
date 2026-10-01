@@ -3,8 +3,9 @@ import { FollowerSnapshot } from '../../domain/entities';
 export interface StoragePort {
   saveSnapshot(snapshot: FollowerSnapshot): Promise<void>;
   getLatestSnapshots(
-    targetUserId: string
+    targetUserId?: string
   ): Promise<[FollowerSnapshot | null, FollowerSnapshot | null]>;
-  getAllSnapshots(targetUserId: string): Promise<FollowerSnapshot[]>;
+  getAllSnapshots(targetUserId?: string): Promise<FollowerSnapshot[]>;
+  removeFollowingUser(targetUserId: string | undefined, userIdToRemove: string): Promise<void>;
   clearAll(): Promise<void>;
 }
